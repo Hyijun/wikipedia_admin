@@ -7,6 +7,8 @@ use std::thread;
 use std::fs::File;
 
 fn main(){
+    const EACH_TIME:u64  = 600;
+    const CHECK_TIMES:u32  = 5;
     loop {
         let mut count = 0;
         let mut results: Vec<CheckResult> = Vec::new();
@@ -28,8 +30,8 @@ fn main(){
             }
             results.push(result);
             count += 1;
-            if count >= 5 { break; }
-            thread::sleep(time::Duration::from_secs(600));
+            if count >= CHECK_TIMES { break; }
+            thread::sleep(time::Duration::from_secs(EACH_TIME));
         }
         let mut a_number = 999999999;
         let mut min_a_time = String::new();
@@ -55,6 +57,9 @@ fn main(){
                 min_p_time = (&each.time).to_string()
             }
         }
+
+
+
         for each in &mut results {
             for eac in &each.admins {
                 let mut inside: bool = false;
@@ -98,43 +103,37 @@ fn main(){
                 }
             }
         }
-        let mut et = 0;
-        let mut a_max_name: Vec<String> = Vec::new();
-        let mut r_max_name: Vec<String> = Vec::new();
-        let mut p_max_name: Vec<String> = Vec::new();
-        for each in admin_c {
-            if each.edit_count >= et {
-                et = each.edit_count;
-                a_max_name.push(each.user_name);
-            }
-        }
-        et = 0;
-        for each in rollbacker_c {
-            if each.edit_count >= et {
-                et = each.edit_count;
-                r_max_name.push(each.user_name);
-            }
-        }
-        et = 0;
-        for each in patroller_c {
-            if each.edit_count >= et {
-                et = each.edit_count;
-                p_max_name.push(each.user_name);
-            }
-        }
 
-        let mut out_message = "一轮回的巡查已经结束，即将输出结果：\n".to_string() + "\t最活跃的管理员：\n";
+        // 计算出最活跃的管理人员
+        let mut et = 0;
+        let mut a_max_name: Vec<String> = count_user_edit(& mut admin_c, CHECK_TIMES);
+        let mut r_max_name: Vec<String> = count_user_edit(& mut rollbacker_c, CHECK_TIMES);
+        let mut p_max_name: Vec<String> = count_user_edit(& mut patroller_c, CHECK_TIMES);
+
+        //计算出各个管理人员的活跃指数
+        //指数计算方法：按照每天24小时中有15个小时可以工作，再以检查结果的总出现次数计算。
+
+        let mut out_message = "\n一轮回的巡查已经结束，即将输出结果：\n".to_string();
+        out_message = out_message + "各个管理员的活跃程度：";
+        out_message = out_message + "管理员：\n";
+        out_message = out_message + format_active(admin_c).as_str();
+        out_message = out_message + "回退员：\n";
+        out_message = out_message + format_active(rollbacker_c).as_str();
+        out_message = out_message + "巡查员：\n";
+        out_message = out_message + format_active(patroller_c).as_str();
+        out_message = out_message + "\n最活跃的管理员：\n";
         for each in a_max_name {
             out_message = "\t\t".to_string() + out_message.as_str() + each.as_str() + "\n";
         }
-        out_message = out_message + "\t最活跃的回退员：\n";
+        out_message = out_message + "最活跃的回退员：\n";
         for each in r_max_name {
             out_message = "\t\t".to_string() + out_message.as_str() + each.as_str() + "\n";
         }
-        out_message = out_message + "\t最活跃的巡查员：\n";
+        out_message = out_message + "最活跃的巡查员：\n";
         for each in p_max_name {
-            out_message = "\t\t".to_string() + out_message.as_str() + each.as_str() + "\n";
+            out_message = "\t\t\t".to_string() + out_message.as_str() + each.as_str() + "\n";
         }
+        println!();
         println!("{}", out_message);
 //        let mut f = File::create("./message.txt").unwrap();
 //        io::copy(&mut out_message, &mut f);
@@ -180,9 +179,7 @@ fn run_check() -> CheckResult {
             let buffer = users[i..(i + 45)].to_vec(); //创建一个缓冲区，将users的第i位（见上定义i之处）到(i + 45)位储存起来。
             u_lists.push(buffer); //将缓冲区（相当于一个组）压入矢量中（该矢量作用见上注释）
         }else if i + 90 >= users.len(){ //如果发现进行下一次切割会导致下标越位（也就是切到头了），则进行最后一次切割
-            if i + 45 <= users.len() { //fixme 这个判断估计是我在做梦时写的，我不知道它的用处，问题也七成出在这
-                u_lists.push(users[i + 45..].to_vec()); //将末尾值压入矢量中
-            }
+            u_lists.push(users[i + 45..].to_vec()); //将末尾值压入矢量中
         }else { //如果下一次分割还没分割到尾，则继续循环往复分割。
             i += 45;
         }
@@ -273,6 +270,27 @@ fn get_web(url: &str) -> String{
     string
 }
 
+fn count_user_edit(count_vec: & mut Vec<UserCount>, check_times:u32) -> Vec<String>{
+    let mut max_name:Vec<String> = Vec::new();
+    let mut et = 0;
+    for each in count_vec {
+        if each.edit_count >= et {
+            et = each.edit_count;
+            max_name.push(each.user_name.clone());
+        }
+        each.active_index = (each.edit_count as f32/check_times as f32)*100.0;
+    }
+    max_name
+}
+
+fn format_active(user_counts:Vec<UserCount>) -> String{
+    let mut message = String::new();
+    for each in user_counts{
+        message = message + each.user_name.as_str() + ":" + each.active_index.to_string().as_str() + "%\n";
+    }
+    message
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 struct UserInfo{
     user : String,
@@ -311,14 +329,15 @@ impl CheckResult{
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 struct UserCount {
     user_name: String,
     edit_count : u32,
+    active_index : f32,
 }
 
 impl UserCount{
     fn new(name:String) -> UserCount{
-        UserCount{user_name:name, edit_count:1}
+        UserCount{user_name:name, edit_count:1, active_index:0.0}
     }
 }
